@@ -319,7 +319,8 @@ def download(
     _stream_download(url, partial, api_key)
 
     if not tarfile.is_tarfile(partial):
-        preview = partial.read_bytes()[:1000].decode("utf-8", errors="replace")
+        with partial.open("rb") as response_file:
+            preview = response_file.read(1000).decode("utf-8", errors="replace")
         raise AIHubError(
             f"The response is not a readable TAR archive. The response was retained at "
             f"{partial}. Response preview:\n{preview}"
@@ -358,7 +359,7 @@ def build_parser() -> argparse.ArgumentParser:
     process = sub.add_parser("process", help="Safely extract a previously downloaded TAR")
     process.add_argument("archive", type=Path)
     process.add_argument("--output-dir", type=Path, default=Path("."))
-    process.add_argument("--keep-archive", action="store_true")
+    process.add_argument("--remove-archive", action="store_true", help="Delete the source TAR after successful processing")
 
     merge = sub.add_parser("merge", help="Merge split files in an extracted directory")
     merge.add_argument("directory", type=Path)
@@ -396,7 +397,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             process_archive(
                 args.archive,
                 args.output_dir,
-                remove_archive=not args.keep_archive,
+                remove_archive=args.remove_archive,
             )
         elif args.command == "merge":
             merge_parts(args.directory)

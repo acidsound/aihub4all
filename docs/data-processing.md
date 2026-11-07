@@ -55,7 +55,7 @@ python skills/aihub-access/scripts/aihub.py download dataset 593 \
 
 # Process an existing TAR
 python skills/aihub-access/scripts/aihub.py process ./archives/aihub-dataset-593.tar \
-  --output-dir ./aihub-data --keep-archive
+  --output-dir ./aihub-data
 
 # Merge split files already extracted
 python skills/aihub-access/scripts/aihub.py merge ./aihub-data
