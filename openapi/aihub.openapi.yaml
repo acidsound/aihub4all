@@ -1,0 +1,190 @@
+openapi: 3.1.0
+info:
+  title: AI Hub Open API
+  version: "0.6-observed"
+  summary: HTTP operations used by the AI Hub shell client
+  description: |
+    Community-maintained OpenAPI description of the AI Hub endpoints observed
+    in the published aihubshell v0.6 client. This is not an official AI Hub
+    specification. Metadata response schemas are intentionally unconstrained
+    because a complete public JSON schema has not been verified.
+  contact:
+    name: AIHub4All community project
+    url: https://github.com/acidsound/aihub4all
+  license:
+    name: MIT
+    url: https://opensource.org/license/mit
+  externalDocs:
+    description: Official AI Hub Open API usage guide
+    url: https://aihub.or.kr/devsport/apishell/list.do?currMenu=528&topMenu=100
+servers:
+  - url: https://api.aihub.or.kr
+    description: AI Hub API
+tags:
+  - name: Datasets
+    description: Dataset discovery and file-tree inspection
+  - name: Data packages
+    description: Data package discovery and file-tree inspection
+  - name: Downloads
+    description: Approved dataset and package archive downloads
+paths:
+  /info/dataset.do:
+    get:
+      tags: [Datasets]
+      operationId: listDatasets
+      summary: List available datasets
+      description: Returns the dataset listing exposed by the AI Hub shell API.
+      responses:
+        "200":
+          description: Dataset listing. The exact JSON schema is not yet verified.
+          content:
+            application/json:
+              schema: {}
+        default:
+          $ref: "#/components/responses/UnspecifiedError"
+  /info/{datasetKey}.do:
+    get:
+      tags: [Datasets]
+      operationId: getDatasetFileTree
+      summary: Get a dataset's file tree
+      description: The response is described by the official shell guide as containing files, sizes, file identifiers, and notices.
+      parameters:
+        - $ref: "#/components/parameters/DatasetKey"
+      responses:
+        "200":
+          description: Dataset details and file tree. The exact JSON schema is not yet verified.
+          content:
+            application/json:
+              schema: {}
+        default:
+          $ref: "#/components/responses/UnspecifiedError"
+  /info/datapckage.do:
+    get:
+      tags: [Data packages]
+      operationId: listDataPackages
+      summary: List available data packages
+      description: Preserves the server's observed datapckage route spelling.
+      responses:
+        "200":
+          description: Data package listing. The exact JSON schema is not yet verified.
+          content:
+            application/json:
+              schema: {}
+        default:
+          $ref: "#/components/responses/UnspecifiedError"
+  /info/pckage/{packageKey}.do:
+    get:
+      tags: [Data packages]
+      operationId: getDataPackageFileTree
+      summary: Get a data package's file tree
+      description: Preserves the server's observed pckage route spelling.
+      parameters:
+        - $ref: "#/components/parameters/PackageKey"
+      responses:
+        "200":
+          description: Data package details and file tree. The exact JSON schema is not yet verified.
+          content:
+            application/json:
+              schema: {}
+        default:
+          $ref: "#/components/responses/UnspecifiedError"
+  /down/0.6/{datasetKey}.do:
+    get:
+      tags: [Downloads]
+      operationId: downloadDataset
+      summary: Download dataset files as a TAR archive
+      description: |
+        Requires an API key and prior dataset download approval through the AI Hub
+        website. Omitting file IDs in the user-facing utility selects all files;
+        the observed shell sends fileSn=all.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DatasetKey"
+        - $ref: "#/components/parameters/FileSelection"
+      responses:
+        "200":
+          description: Downloaded TAR archive. The exact response headers should be verified against a live response.
+          content:
+            application/x-tar:
+              schema:
+                type: string
+                format: binary
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        default:
+          $ref: "#/components/responses/UnspecifiedError"
+  /down/pckage/0.6/{packageKey}.do:
+    get:
+      tags: [Downloads]
+      operationId: downloadDataPackage
+      summary: Download data package files as a TAR archive
+      description: Requires an API key and prior data package download approval through the AI Hub website.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PackageKey"
+        - $ref: "#/components/parameters/FileSelection"
+      responses:
+        "200":
+          description: Downloaded TAR archive. The exact response headers should be verified against a live response.
+          content:
+            application/x-tar:
+              schema:
+                type: string
+                format: binary
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        default:
+          $ref: "#/components/responses/UnspecifiedError"
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: apikey
+      description: API key issued by AI Hub. Keep it secret.
+  parameters:
+    DatasetKey:
+      name: datasetKey
+      in: path
+      required: true
+      description: Numeric dataset key obtained from AI Hub.
+      schema:
+        type: string
+        pattern: "^[0-9]+$"
+      example: "593"
+    PackageKey:
+      name: packageKey
+      in: path
+      required: true
+      description: Numeric data package key obtained from AI Hub. The server route uses the spelling pckage.
+      schema:
+        type: string
+        pattern: "^[0-9]+$"
+      example: "1"
+    FileSelection:
+      name: fileSn
+      in: query
+      required: false
+      description: Comma-separated file IDs. Use all to request every file, matching the observed shell behavior.
+      allowReserved: true
+      schema:
+        type: string
+        default: all
+        pattern: "^(all|[0-9]+(,[0-9]+)*)$"
+      examples:
+        all:
+          value: all
+        selected:
+          value: "51937,51938"
+  responses:
+    UnspecifiedError:
+      description: Error response. Status codes and response schema have not yet been comprehensively verified.
+      content:
+        application/json:
+          schema: {}
