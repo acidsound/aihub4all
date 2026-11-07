@@ -7,16 +7,18 @@ info:
     Community-maintained OpenAPI description of the AI Hub endpoints observed
     in the published aihubshell v0.6 client. This is not an official AI Hub
     specification. Metadata response schemas are intentionally unconstrained
-    because a complete public JSON schema has not been verified.
+    because a complete public JSON schema has not been verified. The inspected
+    shell API guide/source does not identify an approval-status query operation;
+    other undocumented or account-specific endpoints are not ruled out.
   contact:
     name: AIHub4All community project
     url: https://github.com/acidsound/aihub4all
   license:
     name: MIT
     url: https://opensource.org/license/mit
-  externalDocs:
-    description: Official AI Hub Open API usage guide
-    url: https://aihub.or.kr/devsport/apishell/list.do?currMenu=528&topMenu=100
+externalDocs:
+  description: Official AI Hub Open API usage guide
+  url: https://aihub.or.kr/devsport/apishell/list.do?currMenu=528&topMenu=100
 servers:
   - url: https://api.aihub.or.kr
     description: AI Hub API
@@ -94,9 +96,11 @@ paths:
       operationId: downloadDataset
       summary: Download dataset files as a TAR archive
       description: |
-        Requires an API key and prior dataset download approval through the AI Hub
-        website. Omitting file IDs in the user-facing utility selects all files;
-        the observed shell sends fileSn=all.
+        Requires an API key. AI Hub's workflow may require a separate request
+        describing the intended purpose before a dataset can be downloaded.
+        This operation does not expose or verify approval status. Omitting file
+        IDs in the user-facing utility selects all files; the observed shell
+        sends fileSn=all.
       security:
         - ApiKeyAuth: []
       parameters:
@@ -121,7 +125,7 @@ paths:
       tags: [Downloads]
       operationId: downloadDataPackage
       summary: Download data package files as a TAR archive
-      description: Requires an API key and prior data package download approval through the AI Hub website.
+      description: Requires an API key. AI Hub's workflow may require a separate request describing the intended purpose before a data package can be downloaded. This operation does not expose or verify approval status.
       security:
         - ApiKeyAuth: []
       parameters:
