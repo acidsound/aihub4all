@@ -22,6 +22,42 @@ sys.modules[spec.name] = aihub
 spec.loader.exec_module(aihub)
 
 
+class DownloadErrorHintTests(unittest.TestCase):
+    def test_http_403_recommends_manual_approval_check(self) -> None:
+        self.assertTrue(aihub._approval_check_recommended(403, ""))
+
+    def test_permission_text_recommends_manual_approval_check(self) -> None:
+        self.assertTrue(
+            aihub._approval_check_recommended(400, "Dataset download approval required")
+        )
+
+    def test_server_error_does_not_suggest_approval_without_evidence(self) -> None:
+        self.assertFalse(aihub._approval_check_recommended(500, "Internal server error"))
+
+    def test_http_401_points_to_api_key_first(self) -> None:
+        error = aihub.AIHubError(
+            "Unauthorized",
+            code="download_http_error",
+            http_status=401,
+            api_key_check_recommended=True,
+        )
+        payload = error.as_dict()
+        self.assertTrue(payload["api_key_check_recommended"])
+        self.assertFalse(payload["approval_check_recommended"])
+        self.assertIn("AIHUB_API_KEY", payload["next_action"])
+
+    def test_approval_hint_is_explicitly_not_an_approval_status_result(self) -> None:
+        error = aihub.AIHubError(
+            "Forbidden",
+            code="download_access_denied",
+            http_status=403,
+            approval_check_recommended=True,
+        )
+        payload = error.as_dict()
+        self.assertTrue(payload["approval_check_recommended"])
+        self.assertIn("does not currently verify approval status", payload["next_action"])
+
+
 class MergeTests(unittest.TestCase):
     def test_merges_numeric_offsets_and_removes_parts(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -77,9 +113,10 @@ class ExtractionTests(unittest.TestCase):
                 tar.addfile(info, io.BytesIO(payload))
 
             output = root / "out"
-            aihub.safe_extract(archive, output)
+            extracted = aihub.safe_extract(archive, output)
 
             self.assertEqual((output / "dataset" / "sample.txt").read_bytes(), payload)
+            self.assertEqual(extracted, [output / "dataset" / "sample.txt"])
 
     def test_rejects_parent_path_traversal(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
