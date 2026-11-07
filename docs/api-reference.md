@@ -51,7 +51,8 @@ Both download routes require the apikey header and accept the file selector as t
 - Omit a selection in the user-facing workflow to download all files; the shell sends fileSn=all.
 - Specify one or more file IDs as a comma-separated value, for example fileSn=51937,51938.
 - The shell guide calls these identifiers filekey; the actual query parameter used by the shell source is fileSn.
-- Dataset or package download approval must already have been granted through the AI Hub website.
+- AI Hub may require a separate dataset/package request that states the intended purpose.
+- The inspected shell API guide and supplied aihubshell source do not identify an approval-status query operation. This project has not verified whether another undocumented or account-specific endpoint exists.
 
 Example:
 
@@ -73,6 +74,34 @@ curl --fail-with-body --location \
 
 The shell extracts the downloaded TAR and merges files whose names end in .part followed by a numeric byte offset. The HTTP response's detailed headers, error schema, range/resume semantics, and all metadata response fields have not yet been independently verified. Do not assume resumable download support solely because the shell invokes curl with a continue option.
 
+### Download failure and approval troubleshooting
+
+The Python utility supports a machine-readable mode:
+
+~~~bash
+python skills/aihub-access/scripts/aihub.py --json download dataset 593 \
+  --file-ids 51937,51938 --output-dir ./aihub-data
+~~~
+
+On failure it exits with status 1 and emits a JSON object to stdout:
+
+~~~json
+{
+  "ok": false,
+  "command": "download",
+  "error": {
+    "code": "download_access_denied",
+    "message": "AI Hub download request failed (HTTP 403).",
+    "http_status": 403,
+    "approval_check_recommended": true,
+    "api_key_check_recommended": false,
+    "next_action": "Check in your AI Hub account whether the download request for this dataset or package has been submitted and approved. AIHub4All does not currently verify approval status."
+  }
+}
+~~~
+
+The example illustrates the utility's output contract, not a confirmed AI Hub error payload. A 403 response or response text suggesting an approval/permission issue sets approval_check_recommended. This is only a troubleshooting hint; it does not establish that the request is missing or unapproved. A 401 response points the user toward checking the API key. Network failures and unrelated server errors do not automatically recommend an approval check.
+
 ## Endpoint naming caveats
 
 The package endpoints contain the spelling pckage, and the package-list endpoint contains datapckage. These spellings are preserved because they are the observed server routes. Do not silently normalize them in clients.
@@ -88,6 +117,7 @@ The package endpoints contain the spelling pckage, and the package-list endpoint
 | Download approval prerequisite | Official AI Hub guide | Documented |
 | Metadata JSON structure | No complete published schema found | Unverified |
 | Exact response media type and error bodies | Not captured from live API | Unverified |
-| HTTP Range support | Not verified | Unverified |
+| HTTP Range support | Not verified |
+| Approval-status query operation | Not identified in the inspected shell API guide/source; other undocumented endpoints not ruled out | Unverified | Unverified |
 
 Submit sanitized fixtures and verification notes before tightening the schemas.

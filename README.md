@@ -23,7 +23,7 @@ The goal is to make AI Hub datasets easier to discover, understand, download, an
 
 Create or sign in to your account at [AI Hub](https://aihub.or.kr), then request an API key from the AI Hub Open API page. AI Hub sends the key to the account email address according to its current process.
 
-Dataset visibility does not imply download permission. Apply for and obtain approval for each dataset or data package through the AI Hub website before downloading it.
+AI Hub's normal workflow may require a dataset-specific request that states the intended purpose before download. This project does not submit that request. The downloader does not query approval status: no approval-status operation has been verified in the shell API documentation. It attempts the download and, when an access-denied response suggests a permission issue, returns a structured hint to check the request in the AI Hub account. That hint is not proof that approval is missing.
 
 ### 2. Configure the key
 
@@ -68,7 +68,16 @@ python skills/aihub-access/scripts/aihub.py merge ./aihub-data
 
 By default, a successful download is extracted and split parts are merged. Use --archive-only to keep the downloaded TAR without extracting it, or --keep-archive to retain the TAR after successful processing. Existing files are not overwritten.
 
-Before downloading a large dataset, inspect its file tree and available storage. AI Hub's guide recommends reserving roughly 2–3 times the download size for extraction and processing. The utility does not request dataset approval or bypass AI Hub access controls.
+For agent automation, put --json before the subcommand. The command writes one JSON result to stdout and progress messages to stderr:
+
+~~~bash
+python skills/aihub-access/scripts/aihub.py --json download dataset 593 \
+  --file-ids 51937,51938 --output-dir ./aihub-data
+~~~
+
+A failed download exits non-zero and returns an error object. When AI Hub responds with HTTP 403, or its response text indicates an approval/permission issue, error.approval_check_recommended is true and error.next_action tells the agent to ask the user to check the AI Hub website. HTTP 401 instead recommends checking the API key. These are troubleshooting hints; the tool does not know the actual approval state.
+
+Before downloading a large dataset, inspect its file tree and available storage. AI Hub's guide recommends reserving roughly 2–3 times the download size for extraction and processing. The utility does not submit dataset-purpose requests, query approval status, or bypass AI Hub access controls.
 
 ## Agent Skills
 

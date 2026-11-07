@@ -410,9 +410,7 @@ def process_archive(
         "archive_removed": remove_archive,
         "output_dir": str(output_dir),
         "extracted_paths": [str(path) for path in extracted_paths],
-        "merged_files": [str(output_dir / path.relative_to(staging)) for path in []]
-        if not merged_paths
-        else [str(path.relative_to(staging)) for path in merged_paths],
+        "merged_files": [str(output_dir / path.relative_to(staging)) for path in merged_paths],
     }
 
 
