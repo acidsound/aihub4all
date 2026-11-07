@@ -61,4 +61,6 @@ python skills/aihub-access/scripts/aihub.py process ./archives/aihub-dataset-593
 python skills/aihub-access/scripts/aihub.py merge ./aihub-data
 ~~~
 
+The process command preserves a TAR you point it at. Add --remove-archive only when you explicitly want the source archive deleted after successful processing.
+
 The utility does not delete an existing destination file. Move or rename conflicting outputs yourself after checking their contents.

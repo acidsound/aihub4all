@@ -7,6 +7,7 @@ against the current AI Hub service before production use.
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import re
@@ -123,6 +124,11 @@ def _stream_download(url: str, destination: Path, api_key: str) -> None:
     except urllib.error.URLError as exc:
         raise AIHubError(
             f"Download connection failed: {exc.reason}. "
+            f"Any partial response is retained for inspection at {destination}."
+        ) from exc
+    except http.client.HTTPException as exc:
+        raise AIHubError(
+            f"Download stream was interrupted: {exc}. "
             f"Any partial response is retained for inspection at {destination}."
         ) from exc
 
