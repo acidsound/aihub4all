@@ -22,6 +22,8 @@ externalDocs:
 servers:
   - url: https://api.aihub.or.kr
     description: AI Hub API 서버
+  - url: https://aihub.or.kr
+    description: AI Hub MCP 메타데이터 API 서버
 tags:
   - name: 데이터셋
     description: 데이터셋 목록과 파일 정보 조회
@@ -29,6 +31,8 @@ tags:
     description: 데이터 패키지 목록과 파일 정보 조회
   - name: 다운로드
     description: 데이터셋 및 데이터 패키지 파일 다운로드
+  - name: MCP 메타데이터
+    description: X-API-KEY 인증을 사용하는 데이터셋 메타데이터 조회 API
 paths:
   /info/dataset.do:
     get:
@@ -145,6 +149,140 @@ paths:
                 format: binary
         default:
           $ref: "#/components/responses/UnverifiedError"
+  /mcp/dataSetList.do:
+    get:
+      tags: [MCP 메타데이터]
+      operationId: searchDataSets
+      summary: 데이터셋 검색
+      description: |
+        X-API-KEY 헤더로 AI Hub API 키 인증이 필요하다. 공식 MCP 서버
+        구현(github.com/aihub-git/AIHub-MCP)에서 확인한 경로와 파라미터다.
+        응답은 result/data/totalCount envelope이고 데이터 필드는 value 래퍼를
+        사용한다. 2026-11 실측 기준 현재 발급 키로는 거부 응답만 관측되어
+        성공 응답 필드는 미확인 상태다.
+      security:
+        - McpApiKeyAuth: []
+      parameters:
+        - name: searchKeyword
+          in: query
+          schema: { type: string }
+        - name: srchDataRealmCode
+          in: query
+          schema: { type: string }
+        - name: srchdataClCode
+          in: query
+          schema: { type: string }
+        - name: srchDataClDetailCode
+          in: query
+          schema: { type: string }
+        - name: srchOneDataTy
+          in: query
+          schema: { type: string }
+        - name: srchOneDataCnstcYear
+          in: query
+          schema: { type: string }
+        - name: srchDetailCnd
+          in: query
+          schema: { type: string }
+        - name: firstIndex
+          in: query
+          schema: { type: integer }
+        - name: recordCountPerPage
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: result/data/totalCount JSON envelope
+          content:
+            application/json:
+              schema: { type: object }
+        default:
+          $ref: "#/components/responses/UnverifiedError"
+  /mcp/dataSetCnt.do:
+    get:
+      tags: [MCP 메타데이터]
+      operationId: countDataSets
+      summary: 데이터셋 건수
+      description: 검색과 동일한 필터를 사용하며 인증은 X-API-KEY 헤더다.
+      security:
+        - McpApiKeyAuth: []
+      parameters:
+        - name: searchKeyword
+          in: query
+          schema: { type: string }
+        - name: srchDataRealmCode
+          in: query
+          schema: { type: string }
+        - name: srchdataClCode
+          in: query
+          schema: { type: string }
+        - name: srchDataClDetailCode
+          in: query
+          schema: { type: string }
+        - name: srchOneDataTy
+          in: query
+          schema: { type: string }
+        - name: srchOneDataCnstcYear
+          in: query
+          schema: { type: string }
+        - name: srchDetailCnd
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: result/totalCount JSON envelope
+          content:
+            application/json:
+              schema: { type: object }
+        default:
+          $ref: "#/components/responses/UnverifiedError"
+  /mcp/dataSetDetail.do:
+    get:
+      tags: [MCP 메타데이터]
+      operationId: getDataSetDetail
+      summary: 데이터셋 상세
+      description: X-API-KEY 헤더 인증이 필요하다. 상세 응답은 한국어 섹션 키를 사용한다.
+      security:
+        - McpApiKeyAuth: []
+      parameters:
+        - name: dataSetSn
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: result/data JSON envelope
+          content:
+            application/json:
+              schema: { type: object }
+        default:
+          $ref: "#/components/responses/UnverifiedError"
+  /mcp/getDataSetsWithGuide.do:
+    get:
+      tags: [MCP 메타데이터]
+      operationId: getDataSetsWithGuide
+      summary: 설명서·구축활용가이드 보유 데이터셋 목록
+      description: 인증은 X-API-KEY 헤더다. srchGuideFileSe는 ANY, FILESE001(데이터 설명서), FILESE002(구축활용가이드) 중 하나다.
+      security:
+        - McpApiKeyAuth: []
+      parameters:
+        - name: srchGuideFileSe
+          in: query
+          schema: { type: string, enum: [ANY, FILESE001, FILESE002] }
+        - name: firstIndex
+          in: query
+          schema: { type: integer }
+        - name: recordCountPerPage
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: result/data JSON envelope
+          content:
+            application/json:
+              schema: { type: object }
+        default:
+          $ref: "#/components/responses/UnverifiedError"
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -152,6 +290,11 @@ components:
       in: header
       name: apikey
       description: AI Hub에서 발급받은 API 키. 외부에 노출하지 않는다.
+    McpApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-KEY
+      description: AI Hub MCP 메타데이터 API 인증용 API 키 헤더.
   parameters:
     DatasetKey:
       name: datasetKey

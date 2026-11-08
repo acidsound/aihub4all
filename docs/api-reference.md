@@ -136,6 +136,58 @@ python skills/aihub-access/scripts/aihub.py --json download dataset 593 \
 }
 ~~~
 
+## MCP 메타데이터 API
+
+AI Hub는 aihubshell 다운로드 API와 별도로, 데이터셋 메타데이터를 JSON으로 조회하는 MCP용 API를 운영합니다. AI Hub 공식 MCP 서버 구현(github.com/aihub-git/AIHub-MCP)에서 확인한 내용이며, 공식 안내 페이지도 같은 API key로 aihubShell과 MCP 모두 사용 가능하다고 안내합니다.
+
+기본 주소: https://aihub.or.kr/mcp/
+
+인증: 모든 요청에 `X-API-KEY` 헤더로 AI Hub API key를 전달합니다. key가 없으면 `{"result":"FAIL","message":"API 키가 없습니다. ..."}` 실패 응답이 옵니다.
+
+### API 목록
+
+| 기능 | 요청 | 입력 |
+| --- | --- | --- |
+| 데이터셋 검색 | GET /mcp/dataSetList.do | searchKeyword, srchDataRealmCode, srchdataClCode, srchDataClDetailCode, srchOneDataTy, srchOneDataCnstcYear, srchDetailCnd, firstIndex(오프셋), recordCountPerPage(페이지당 건수) |
+| 데이터셋 건수 | GET /mcp/dataSetCnt.do | 검색과 동일한 필터(페이징 제외) |
+| 데이터셋 상세 | GET /mcp/dataSetDetail.do | dataSetSn |
+| 설명서·가이드 보유 목록 | GET /mcp/getDataSetsWithGuide.do | srchGuideFileSe(ANY, FILESE001=데이터 설명서, FILESE002=구축활용가이드), firstIndex, recordCountPerPage |
+
+### 응답 형식
+
+공통 envelope:
+
+~~~json
+{
+  "result": "SUCCESS",
+  "data": { ... },
+  "totalCount": {"총 개수": 412}
+}
+~~~
+
+실패 시 `result`가 `FAIL`이고 `message`가 들어옵니다. 일부 실패는 `guideUrl`을 함께 반환합니다.
+
+데이터 필드는 `{value, label, description}` 래퍼로 감싸져 오며, AIHub4All 도구는 `value`만 풀어서 보여줍니다. 상세 응답의 단위 섹션은 한국어 키를 사용합니다(예: `주요 정보`, `데이터 개요`, `메타데이터 구조표`, `데이터 성능지표`, `어노테이션 포맷 및 데이터 구조`, `구축 업체`, `파일 목록(API 다운로드)`, `데이터 설명서`, `구축활용가이드`).
+
+### CLI 사용
+
+~~~bash
+python skills/aihub-access/scripts/aihub.py --json search --keyword "감성" --limit 5
+python skills/aihub-access/scripts/aihub.py --json count --keyword "음성"
+python skills/aihub-access/scripts/aihub.py --json detail 71349
+python skills/aihub-access/scripts/aihub.py --json describe "감성 및 발화 스타일 동시 고려 음성합성 데이터"
+python skills/aihub-access/scripts/aihub.py --json guides --type manual --limit 10
+~~~
+
+### 확인 상태
+
+| 항목 | 근거 | 상태 |
+| --- | --- | --- |
+| 경로·파라미터 | AIHub-MCP 서버 소스 | 확인 |
+| X-API-KEY 인증 | AIHub-MCP 서버 소스 | 확인 |
+| envelope·Field 래퍼 구조 | AIHub-MCP 서버 DTO | 확인 |
+| 실제 성공 응답 | 라이브 검증 | 미확인 — aihubshell 용으로 발급받은 key로는 "잘못된 접근입니다" 실패만 관측됨(2026-11). 성공 응답 사례를 확보한 뒤 필드를 더 반영합니다. |
+
 ## 확인 상태
 
 | 항목 | 근거 | 상태 |

@@ -38,6 +38,16 @@ python <skill-directory>/scripts/aihub.py package PACKAGE_KEY
 
 사용자가 데이터셋 ID를 주지 않았다면 목록을 조회한다. 목록에서 후보를 좁힌 다음 상세 조회로 파일 ID와 용량을 확인한다. 응답에서 실제로 확인한 식별자만 사용한다.
 
+검색어가 있을 때는 전체 목록을 가져오지 않고 MCP 메타데이터 API로 검색한다. 단, 이 API는 API 키가 X-API-KEY 헤더 인증을 통과해야 작동한다.
+
+~~~bash
+python <skill-directory>/scripts/aihub.py search --keyword "키워드" --limit 5
+python <skill-directory>/scripts/aihub.py detail DATASET_SN
+python <skill-directory>/scripts/aihub.py describe "정확한 데이터셋 이름"
+~~~
+
+검색 실패(mcp_request_failed) 시에는 전체 목록 조회로 되돌린다. 이때 오류 메시지와 함께 API 키 확인을 안내한다.
+
 ### 2. 다운로드 범위 정리
 
 다운로드 전에 다음 항목을 확인한다.

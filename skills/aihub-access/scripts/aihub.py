@@ -23,6 +23,8 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, TextIO
 
 API_BASE = "https://api.aihub.or.kr"
+MCP_BASE = "https://aihub.or.kr/mcp/"
+MCP_KEY_HEADER = "X-API-KEY"
 DOWNLOAD_VERSION = "0.6"
 USER_AGENT = "AIHub4All/0.1.0 (+https://github.com/acidsound/aihub4all)"
 PART_RE = re.compile(r"^(?P<base>.+)\.part(?P<offset>[0-9]+)$")
@@ -135,6 +137,82 @@ def request_metadata(path: str) -> Any:
         return json.loads(body)
     except json.JSONDecodeError:
         return body
+
+
+def request_mcp(path: str, params: dict[str, Any]) -> dict[str, Any]:
+    """Call an AI Hub MCP metadata endpoint and return the raw envelope."""
+    api_key = _api_key()
+    url = MCP_BASE + path
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/json",
+            MCP_KEY_HEADER: api_key,
+            "User-Agent": USER_AGENT,
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            body = _read_text(response)
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise AIHubError(
+            f"MCP request failed (HTTP {exc.code}): {body[:2000]}",
+            code="mcp_http_error",
+            http_status=exc.code,
+            response_excerpt=body[:1000] or None,
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise AIHubError(
+            f"Could not connect to AI Hub MCP: {exc.reason}",
+            code="network_error",
+        ) from exc
+
+    try:
+        envelope = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise AIHubError(
+            f"MCP response was not valid JSON: {body[:500]}",
+            code="unexpected_response",
+        ) from exc
+    if not isinstance(envelope, dict):
+        raise AIHubError(
+            f"Unexpected MCP response shape: {body[:500]}",
+            code="unexpected_response",
+        )
+
+    if str(envelope.get("result", "")).strip().upper() == "FAIL":
+        message = str(envelope.get("message") or "AI Hub MCP request failed")
+        guide_url = envelope.get("guide_url") or envelope.get("guideUrl")
+        raise AIHubError(
+            f"{message}{' See ' + str(guide_url) if guide_url else ''}",
+            code="mcp_request_failed",
+            api_key_check_recommended="키" in message or "접근" in message,
+            response_excerpt=str(guide_url) if guide_url else None,
+        )
+    return envelope
+
+
+def unwrap_field(node: Any) -> Any:
+    """Strip the {value, label, description} wrappers the MCP API uses."""
+    if isinstance(node, dict):
+        if "value" in node and set(node) <= {"value", "label", "description"}:
+            return unwrap_field(node["value"])
+        return {key: unwrap_field(value) for key, value in node.items()}
+    if isinstance(node, list):
+        return [unwrap_field(item) for item in node]
+    return node
+
+
+def _mcp_total_count(envelope: dict[str, Any]) -> int | None:
+    total = envelope.get("totalCount")
+    if isinstance(total, dict):
+        count = total.get("총 개수")
+        if isinstance(count, int):
+            return count
+    return None
 
 
 def _api_key() -> str:
@@ -521,6 +599,152 @@ def download(
     return result
 
 
+MCP_SEARCH_PARAMS = (
+    ("keyword", "searchKeyword"),
+    ("realm_code", "srchDataRealmCode"),
+    ("class_code", "srchdataClCode"),
+    ("class_detail_code", "srchDataClDetailCode"),
+    ("data_type", "srchOneDataTy"),
+    ("year", "srchOneDataCnstcYear"),
+    ("detail_condition", "srchDetailCnd"),
+)
+GUIDE_FILE_SE = {"manual": "FILESE001", "guide": "FILESE002", "any": "ANY"}
+_HTML_TAG_RE = re.compile(r"(?s)<[^>]+>")
+_WHITESPACE_RE = re.compile(r"\s+")
+
+
+def _search_params(filters: dict[str, Any]) -> dict[str, str]:
+    params: dict[str, str] = {}
+    for arg_name, query_name in MCP_SEARCH_PARAMS:
+        value = filters.get(arg_name)
+        if value:
+            params[query_name] = str(value)
+    return params
+
+
+def mcp_search(
+    filters: dict[str, Any],
+    limit: int | None = None,
+    offset: int | None = None,
+) -> dict[str, Any]:
+    params = _search_params(filters)
+    if limit is not None:
+        params["recordCountPerPage"] = str(limit)
+    if offset is not None:
+        params["firstIndex"] = str(offset)
+    envelope = request_mcp("dataSetList.do", params)
+    data = envelope.get("data")
+    rows = data.get("list") if isinstance(data, dict) else None
+    items = rows.get("value") if isinstance(rows, dict) else None
+    return {
+        "total_count": _mcp_total_count(envelope),
+        "items": unwrap_field(items or []),
+    }
+
+
+def mcp_count(filters: dict[str, Any]) -> dict[str, Any]:
+    envelope = request_mcp("dataSetCnt.do", _search_params(filters))
+    return {"total_count": _mcp_total_count(envelope)}
+
+
+def mcp_detail(data_set_sn: str) -> dict[str, Any]:
+    if not data_set_sn.isdigit():
+        raise AIHubError("dataSetSn must contain digits only.", code="invalid_identifier")
+    envelope = request_mcp("dataSetDetail.do", {"dataSetSn": data_set_sn})
+    return unwrap_field(envelope.get("data") or {})
+
+
+def _plain_text(value: Any, cap: int) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value
+    for _ in range(2):
+        text = _HTML_TAG_RE.sub(" ", text)
+        text = (
+            text.replace("&nbsp;", " ")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", '"')
+            .replace("&#39;", "'")
+            .replace("&amp;", "&")
+        )
+    text = _WHITESPACE_RE.sub(" ", text).strip()
+    if len(text) > cap:
+        text = text[:cap].strip() + "…"
+    return text or None
+
+
+def mcp_describe(name: str) -> dict[str, Any] | None:
+    """Find the best-matching dataset by name and return a compact summary."""
+    cleaned = (name or "").strip()
+    if not cleaned:
+        raise AIHubError("Dataset name is required.", code="invalid_argument")
+    keyword = _WHITESPACE_RE.sub("%", cleaned)
+    search = mcp_search({"keyword": keyword}, limit=8, offset=0)
+    items = search["items"]
+    if not items:
+        return None
+    normalized = _WHITESPACE_RE.sub(" ", cleaned).lower()
+    best = next(
+        (
+            item
+            for item in items
+            if isinstance(item, dict)
+            and _WHITESPACE_RE.sub(" ", str(item.get("dataNm") or "")).lower() == normalized
+        ),
+        items[0],
+    )
+    sn = str(best.get("dataSetSn") or "").strip() if isinstance(best, dict) else ""
+    if not sn.isdigit():
+        raise AIHubError("Search hit did not carry a numeric dataSetSn.", code="unexpected_response")
+    detail = mcp_detail(sn)
+    core = detail.get("주요 정보") or {}
+    summary = detail.get("데이터 개요") or {}
+    annotation = detail.get("어노테이션 포맷 및 데이터 구조") or {}
+    return {
+        "dataSetSn": sn,
+        "url": core.get("url"),
+        "dataNm": core.get("dataNm"),
+        "dataIntrcn": _plain_text(summary.get("dataIntrcn"), 1000),
+        "cnstcPurps": _plain_text(summary.get("cnstcPurps"), 1000),
+        "detailDataDc": _plain_text(annotation.get("detailDataDc"), 1500),
+        "dataRealmNm": core.get("dataRealmNm"),
+        "main_keywords": core.get("aiLrnDataMainKwrds"),
+        "data_types": core.get("dataTys"),
+        "data_cnstc_year": core.get("dataCnstcYear"),
+        "read_count": core.get("rdcnt"),
+    }
+
+
+def mcp_guides(guide_type: str = "any", limit: int = 10) -> dict[str, Any]:
+    file_se = GUIDE_FILE_SE.get(guide_type, "ANY")
+    params = {
+        "srchGuideFileSe": file_se,
+        "firstIndex": "0",
+        "recordCountPerPage": str(max(1, min(limit, 200))),
+    }
+    envelope = request_mcp("getDataSetsWithGuide.do", params)
+    raw_data = envelope.get("data")
+    data: dict[str, Any] = raw_data if isinstance(raw_data, dict) else {}
+    counts: dict[str, Any] = {}
+    cnt_node = data.get("cnt")
+    raw_counts = cnt_node.get("value") if isinstance(cnt_node, dict) else None
+    for entry in raw_counts or []:
+        if isinstance(entry, dict):
+            for key, field in entry.items():
+                if key in GUIDE_FILE_SE.values() and isinstance(field, dict):
+                    counts[key] = field.get("value")
+    list_node = data.get("list")
+    items = list_node.get("value") if isinstance(list_node, dict) else None
+    return {
+        "counts": {
+            "manual": counts.get("FILESE001"),
+            "guide": counts.get("FILESE002"),
+        },
+        "items": unwrap_field(items or []),
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Discover, download, and process AI Hub datasets and data packages."
@@ -556,7 +780,50 @@ def build_parser() -> argparse.ArgumentParser:
     merge = sub.add_parser("merge", help="Merge split files in an extracted directory")
     merge.add_argument("directory", type=Path)
 
+    search = sub.add_parser(
+        "search",
+        help="Search datasets by keyword and filters (AI Hub MCP metadata API)",
+    )
+    _add_search_filters(search)
+    search.add_argument("--limit", type=int, default=10, help="Rows per page (default 10)")
+    search.add_argument("--offset", type=int, default=0, help="Paging offset (default 0)")
+
+    count = sub.add_parser(
+        "count",
+        help="Count datasets matching keyword and filters (AI Hub MCP metadata API)",
+    )
+    _add_search_filters(count)
+
+    mcp_detail_parser = sub.add_parser(
+        "detail",
+        help="Show full metadata for one dataset by dataSetSn (AI Hub MCP metadata API)",
+    )
+    mcp_detail_parser.add_argument("data_set_sn")
+
+    describe = sub.add_parser(
+        "describe",
+        help="Look up a dataset by name and summarize it (AI Hub MCP metadata API)",
+    )
+    describe.add_argument("name")
+
+    guides = sub.add_parser(
+        "guides",
+        help="List datasets that ship data manuals or build guides (AI Hub MCP metadata API)",
+    )
+    guides.add_argument("--type", choices=("manual", "guide", "any"), default="any")
+    guides.add_argument("--limit", type=int, default=10)
+
     return parser
+
+
+def _add_search_filters(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--keyword", help="Free-text keyword (name, content, keyword fields)")
+    parser.add_argument("--realm-code", help="Data realm code (e.g. Korean, culture/tourism)")
+    parser.add_argument("--class-code", help="Data classification code")
+    parser.add_argument("--class-detail-code", help="Data detail classification code")
+    parser.add_argument("--data-type", help="Data type (e.g. text, image)")
+    parser.add_argument("--year", help="Construction year")
+    parser.add_argument("--detail-condition", help="Detail condition (sample data, safety zone)")
 
 
 def _emit_json(payload: dict[str, Any]) -> None:
@@ -612,6 +879,30 @@ def main(argv: Iterable[str] | None = None) -> int:
                 "directory": str(args.directory.expanduser().resolve()),
                 "merged_files": [str(path) for path in merged],
             }
+        elif args.command in ("search", "count"):
+            filters = {
+                "keyword": args.keyword,
+                "realm_code": args.realm_code,
+                "class_code": args.class_code,
+                "class_detail_code": args.class_detail_code,
+                "data_type": args.data_type,
+                "year": args.year,
+                "detail_condition": args.detail_condition,
+            }
+            if args.command == "search":
+                data = mcp_search(filters, limit=args.limit, offset=args.offset)
+            else:
+                data = mcp_count(filters)
+            result = {"command": args.command, **data}
+        elif args.command == "detail":
+            data = mcp_detail(args.data_set_sn)
+            result = {"command": args.command, "data_set_sn": args.data_set_sn, "data": data}
+        elif args.command == "describe":
+            data = mcp_describe(args.name)
+            result = {"command": args.command, "found": data is not None, "data": data}
+        elif args.command == "guides":
+            data = mcp_guides(args.type, args.limit)
+            result = {"command": args.command, **data}
         else:
             parser.error(f"Unknown command: {args.command}")
             return 2
@@ -623,9 +914,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                 print(result["data"])
             else:
                 print(json.dumps(result["data"], ensure_ascii=False, indent=2))
-        elif args.command == "download":
-            print(json.dumps({"ok": True, **result}, ensure_ascii=False, indent=2))
-        elif args.command == "process":
+        elif args.command in ("download", "process", "search", "count", "detail", "describe", "guides"):
             print(json.dumps({"ok": True, **result}, ensure_ascii=False, indent=2))
         elif args.command == "merge":
             for path in result["merged_files"]:

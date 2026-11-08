@@ -15,7 +15,7 @@ AIHub4All은 [AI Hub](https://aihub.or.kr)의 데이터셋을 더 쉽게 찾고,
 | 한국어 문서 | API 사용법, 데이터 탐색, 다운로드, 파일 처리 안내 |
 | OpenAPI 3.1 | AI Hub 공개 Shell에서 사용하는 HTTP API 명세 |
 | Agent Skill | 데이터 탐색부터 다운로드와 파일 처리까지 수행하는 공통 Skill |
-| Python 도구 | API 조회, TAR 다운로드, 안전한 압축 해제, 분할 파일 병합 |
+| Python 도구 | API 조회, TAR 다운로드, 안전한 압축 해제, 분할 파일 병합, 데이터셋 검색 |
 | 예제와 테스트 | curl 예제, 오프라인 단위 테스트, OpenAPI 검증 |
 
 ## API 목록
@@ -35,6 +35,17 @@ AIHub4All은 [AI Hub](https://aihub.or.kr)의 데이터셋을 더 쉽게 찾고,
 - fileSn에는 파일 ID를 쉼표로 구분해 전달합니다. 전체 파일을 요청할 때는 all을 사용합니다.
 - 메타데이터 응답 필드는 공식 문서에 완전한 JSON Schema가 공개되어 있지 않아, 확인되지 않은 필드를 명세에 임의로 추가하지 않았습니다.
 - 승인 상태를 조회하는 API는 확인하지 못했습니다. 다운로드가 거부되면 도구가 AI Hub 웹사이트에서 신청·승인 상태를 확인할 필요가 있다는 힌트를 반환합니다.
+
+AI Hub는 aihubshell 다운로드 API 외에 MCP용 메타데이터 API를 운영합니다. 공식 MCP 서버 구현(github.com/aihub-git/AIHub-MCP)에서 확인한 4개 엔드포인트입니다.
+
+| 기능 | 방식 | 경로 | API 키 | 주요 입력 |
+| --- | --- | --- | --- | --- |
+| 데이터셋 검색 | GET | /mcp/dataSetList.do | X-API-KEY 헤더 | searchKeyword, 영역·분류·데이터유형·연도 필터, firstIndex, recordCountPerPage |
+| 데이터셋 건수 | GET | /mcp/dataSetCnt.do | X-API-KEY 헤더 | 검색과 동일한 필터 |
+| 데이터셋 상세 | GET | /mcp/dataSetDetail.do | X-API-KEY 헤더 | dataSetSn |
+| 설명서·가이드 보유 목록 | GET | /mcp/getDataSetsWithGuide.do | X-API-KEY 헤더 | srchGuideFileSe, firstIndex, recordCountPerPage |
+
+2026-11 실측 기준 현재 발급받은 API 키로는 aihubshell 다운로드 경로만 정상 작동하고 /mcp 경로는 거부됩니다. 공식 안내에는 한 키로 두 API를 모두 쓸 수 있다고 되어 있어, 키 갱신 시 동작이 달라질 수 있습니다.
 
 자세한 내용은 [API 레퍼런스](docs/api-reference.md)와 [OpenAPI 명세](openapi/aihub.openapi.yaml)를 참고하세요.
 
@@ -74,6 +85,11 @@ python skills/aihub-access/scripts/aihub.py dataset 593
 # 데이터 패키지 목록과 특정 패키지의 파일 정보
 python skills/aihub-access/scripts/aihub.py packages
 python skills/aihub-access/scripts/aihub.py package 1
+
+# MCP 메타데이터 API로 데이터셋 검색
+python skills/aihub-access/scripts/aihub.py search --keyword "감성" --limit 5
+python skills/aihub-access/scripts/aihub.py count --keyword "음성"
+python skills/aihub-access/scripts/aihub.py detail 71349
 
 # 지정한 파일만 다운로드
 python skills/aihub-access/scripts/aihub.py download dataset 593 \

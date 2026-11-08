@@ -36,6 +36,39 @@ AI Hub 데이터는 이용 목적을 적은 별도 신청이 필요할 수 있�
 - approval_check_recommended: true: 서버의 HTTP 403 또는 응답 문구가 승인·권한 문제를 시사한다. AI Hub 웹사이트에서 신청 상태를 확인하도록 사용자에게 안내한다. 승인 누락을 확정한 값은 아니다.
 - api_key_check_recommended: true: API 키 설정과 유효성을 먼저 확인한다.
 
+## MCP 메타데이터 API
+
+aihubshell 다운로드 API와 별도로 데이터셋 메타데이터를 JSON으로 조회하는 MCP용 API. 공식 MCP 서버 구현(github.com/aihub-git/AIHub-MCP)에서 확인.
+
+- 기본 주소: `https://aihub.or.kr/mcp/`
+- 인증: 모든 요청에 `X-API-KEY` 헤더로 AI Hub API key 전달
+- envelope: `{"result":"SUCCESS","data":{...},"totalCount":{"총 개수":N}}`
+- 데이터 필드는 `{value,label,description}` 래퍼로 오며 도구는 value만 풀어준다
+- 상세 섹션은 한국어 키 사용(`주요 정보`, `데이터 개요` 등)
+
+### API 목록
+
+| 기능 | 엔드포인트 | 입력 |
+| --- | --- | --- |
+| 데이터셋 검색 | `/mcp/dataSetList.do` | searchKeyword, srchDataRealmCode, srchdataClCode, srchDataClDetailCode, srchOneDataTy, srchOneDataCnstcYear, srchDetailCnd, firstIndex, recordCountPerPage |
+| 데이터셋 건수 | `/mcp/dataSetCnt.do` | 검색과 동일한 필터(페이징 제외) |
+| 데이터셋 상세 | `/mcp/dataSetDetail.do` | dataSetSn |
+| 설명서·가이드 보유 목록 | `/mcp/getDataSetsWithGuide.do` | srchGuideFileSe(ANY/FILESE001/FILESE002), firstIndex, recordCountPerPage |
+
+### CLI 사용
+
+```
+python skills/aihub-access/scripts/aihub.py --json search --keyword "감성" --limit 5
+python skills/aihub-access/scripts/aihub.py --json count --keyword "음성"
+python skills/aihub-access/scripts/aihub.py --json detail 71349
+python skills/aihub-access/scripts/aihub.py --json describe "데이터명"
+python skills/aihub-access/scripts/aihub.py --json guides --type manual --limit 10
+```
+
+실패 응답: `{"result":"FAIL","message":"..."}`(일부는 guideUrl 포함). 실패 코드 `mcp_request_failed`.
+
+실측 한계(2026-11): 우리 key로는 "잘못된 접근입니다" 실패만 관측됨. 경로·파라미터·envelope 구조는 공식 MCP 서버 소스에서 확인했으나, 성공 응답 사례는 미확인.
+
 ## 확인된 서버 동작
 
 2026-11 실제 응답으로 확인한 내용이다.
