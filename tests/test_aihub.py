@@ -116,7 +116,40 @@ class ExtractionTests(unittest.TestCase):
             extracted = aihub.safe_extract(archive, output)
 
             self.assertEqual((output / "dataset" / "sample.txt").read_bytes(), payload)
-            self.assertEqual(extracted, [output / "dataset" / "sample.txt"])
+            self.assertEqual(extracted, [(output / "dataset" / "sample.txt").resolve()])
+
+    def test_extracts_byte_identical_duplicate_member_once(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            archive = root / "sample.tar"
+            payload = b"hello AI Hub"
+            with tarfile.open(archive, "w") as tar:
+                for _ in range(2):
+                    info = tarfile.TarInfo("dataset/sample.txt")
+                    info.size = len(payload)
+                    tar.addfile(info, io.BytesIO(payload))
+
+            extracted = aihub.safe_extract(archive, root / "out")
+
+            self.assertEqual((root / "out" / "dataset" / "sample.txt").read_bytes(), payload)
+            self.assertEqual(len(extracted), 1)
+
+    def test_rejects_conflicting_duplicate_member(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            archive = root / "conflicting.tar"
+            with tarfile.open(archive, "w") as tar:
+                info = tarfile.TarInfo("dataset/sample.txt")
+                info.size = len(b"first")
+                tar.addfile(info, io.BytesIO(b"first"))
+                info = tarfile.TarInfo("dataset/sample.txt")
+                info.size = len(b"second")
+                tar.addfile(info, io.BytesIO(b"second"))
+
+            with self.assertRaises(aihub.AIHubError) as context:
+                aihub.safe_extract(archive, root / "out")
+
+            self.assertEqual(context.exception.code, "duplicate_archive_path")
 
     def test_rejects_parent_path_traversal(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

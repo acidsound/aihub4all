@@ -7,6 +7,7 @@ against the current AI Hub service before production use.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import http.client
 import json
 import os
@@ -95,6 +96,12 @@ def _print_progress(message: str, stream: TextIO) -> None:
     print(message, file=stream, flush=True)
 
 
+def _looks_like_generated_error_page(body: str) -> bool:
+    """Heuristic: gateway error pages are HTML; AI Hub payloads are plain text."""
+    head = (body or "").lstrip()[:512].lower()
+    return head.startswith("<") or "<html" in head or "<!doctype" in head
+
+
 def request_metadata(path: str) -> Any:
     url = API_BASE + path
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
@@ -103,12 +110,21 @@ def request_metadata(path: str) -> Any:
             body = _read_text(response)
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
-        raise AIHubError(
-            f"Metadata request failed (HTTP {exc.code}): {body[:2000]}",
-            code="metadata_http_error",
-            http_status=exc.code,
-            response_excerpt=body[:1000] or None,
-        ) from exc
+        # The AI Hub front proxy answers /info metadata requests with HTTP
+        # 502 or 503 while still delivering the complete response body. The
+        # status alone is therefore not proof of failure; accept the body
+        # only when it is clearly content rather than a generated error page.
+        if (
+            exc.code not in (502, 503)
+            or not body.strip()
+            or _looks_like_generated_error_page(body)
+        ):
+            raise AIHubError(
+                f"Metadata request failed (HTTP {exc.code}): {body[:2000]}",
+                code="metadata_http_error",
+                http_status=exc.code,
+                response_excerpt=body[:1000] or None,
+            ) from exc
     except urllib.error.URLError as exc:
         raise AIHubError(
             f"Could not connect to AI Hub: {exc.reason}",
@@ -246,6 +262,19 @@ def _safe_member_path(root: Path, member_name: str) -> Path:
     return destination
 
 
+def _member_md5(tar: tarfile.TarFile, member: tarfile.TarInfo) -> str:
+    source = tar.extractfile(member)
+    if source is None:
+        raise AIHubError(f"Could not read TAR member: {member.name!r}", code="archive_read_error")
+    digest = hashlib.md5()
+    while True:
+        chunk = source.read(CHUNK_SIZE)
+        if not chunk:
+            break
+        digest.update(chunk)
+    return digest.hexdigest()
+
+
 def safe_extract(archive: Path, destination: Path) -> list[Path]:
     """Extract only regular files/directories and reject path/link attacks."""
     destination.mkdir(parents=True, exist_ok=True)
@@ -253,8 +282,9 @@ def safe_extract(archive: Path, destination: Path) -> list[Path]:
     try:
         with tarfile.open(archive, mode="r:*") as tar:
             members = tar.getmembers()
-            file_paths: set[Path] = set()
-            for member in members:
+            first_by_path: dict[Path, tarfile.TarInfo] = {}
+            skipped: set[int] = set()
+            for index, member in enumerate(members):
                 target = _safe_member_path(destination, member.name)
                 if not (member.isdir() or member.isfile()):
                     raise AIHubError(
@@ -262,15 +292,25 @@ def safe_extract(archive: Path, destination: Path) -> list[Path]:
                         "links and special files are rejected.",
                         code="unsupported_archive_entry",
                     )
-                if member.isfile():
-                    if target in file_paths:
-                        raise AIHubError(
-                            f"Duplicate TAR file path: {member.name!r}",
-                            code="duplicate_archive_path",
-                        )
-                    file_paths.add(target)
+                if not member.isfile():
+                    continue
+                previous = first_by_path.get(target)
+                if previous is None:
+                    first_by_path[target] = member
+                    continue
+                # AI Hub TARs list the same file more than once. Accept the
+                # duplicate only when both copies are byte-identical; content
+                # that differs under one path stays an error.
+                if previous.size != member.size or _member_md5(tar, previous) != _member_md5(tar, member):
+                    raise AIHubError(
+                        f"Duplicate TAR file path with conflicting content: {member.name!r}",
+                        code="duplicate_archive_path",
+                    )
+                skipped.add(index)
 
-            for member in members:
+            for index, member in enumerate(members):
+                if index in skipped:
+                    continue
                 target = _safe_member_path(destination, member.name)
                 if member.isdir():
                     target.mkdir(parents=True, exist_ok=True)
