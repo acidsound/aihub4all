@@ -45,7 +45,7 @@ AI Hub는 aihubshell 다운로드 API 외에 MCP용 메타데이터 API를 운�
 | 데이터셋 상세 | GET | /mcp/dataSetDetail.do | X-API-KEY 헤더 | dataSetSn |
 | 설명서·가이드 보유 목록 | GET | /mcp/getDataSetsWithGuide.do | X-API-KEY 헤더 | srchGuideFileSe, firstIndex, recordCountPerPage |
 
-2026-11 실측 기준 현재 발급받은 API 키로는 aihubshell 다운로드 경로만 정상 작동하고 /mcp 경로는 거부됩니다. 공식 안내에는 한 키로 두 API를 모두 쓸 수 있다고 되어 있어, 키 갱신 시 동작이 달라질 수 있습니다.
+2026-11-08 실측: `X-MCP-Tool` 헤더에 공식 도구명(searchDataSets·countDataSets·getDataSet·getDataSetsWithGuide)을 포함하면 정상 응답을 반환합니다. 해당 헤더가 없거나 임의 값이면 거부합니다. search/count/detail/describe/guides 명령 전부 라이브 작동을 확인했습니다.
 
 자세한 내용은 [API 레퍼런스](docs/api-reference.md)와 [OpenAPI 명세](openapi/aihub.openapi.yaml)를 참고하세요.
 

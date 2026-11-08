@@ -206,6 +206,15 @@ class McpApiTests(unittest.TestCase):
         self.assertIn("searchKeyword=%EC%9D%8C%EC%84%B1", called_url)
         self.assertIn("recordCountPerPage=2", called_url)
 
+    def test_request_mcp_sends_official_tool_name_header(self) -> None:
+        # The backend rejects requests without a recognized X-MCP-Tool value
+        # ("잘못된 접근입니다"), so every call must carry one.
+        envelope = {"result": "SUCCESS", "totalCount": {"총 개수": 1}}
+        with self._patch_urlopen([envelope]) as mock_open:
+            aihub.mcp_count({})
+        request = mock_open.call_args[0][0]
+        self.assertEqual(request.headers.get("X-mcp-tool"), "countDataSets")
+
     def test_count_uses_count_endpoint_without_paging(self) -> None:
         envelope = {"result": "SUCCESS", "totalCount": {"총 개수": 7}}
         with self._patch_urlopen([envelope]) as mock_open:

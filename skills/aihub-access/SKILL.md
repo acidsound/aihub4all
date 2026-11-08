@@ -38,7 +38,7 @@ python <skill-directory>/scripts/aihub.py package PACKAGE_KEY
 
 사용자가 데이터셋 ID를 주지 않았다면 목록을 조회한다. 목록에서 후보를 좁힌 다음 상세 조회로 파일 ID와 용량을 확인한다. 응답에서 실제로 확인한 식별자만 사용한다.
 
-검색어가 있을 때는 전체 목록을 가져오지 않고 MCP 메타데이터 API로 검색한다. 단, 이 API는 API 키가 X-API-KEY 헤더 인증을 통과해야 작동한다.
+검색어가 있을 때는 전체 목록을 가져오지 않고 MCP 메타데이터 API로 검색한다. 이 API는 X-API-KEY 헤더와 함께 X-MCP-Tool 헤더(공식 도구명)가 필요하다. 도구가 자동으로 붙인다.
 
 ~~~bash
 python <skill-directory>/scripts/aihub.py search --keyword "키워드" --limit 5

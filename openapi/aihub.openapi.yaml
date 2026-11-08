@@ -158,11 +158,11 @@ paths:
         X-API-KEY 헤더로 AI Hub API 키 인증이 필요하다. 공식 MCP 서버
         구현(github.com/aihub-git/AIHub-MCP)에서 확인한 경로와 파라미터다.
         응답은 result/data/totalCount envelope이고 데이터 필드는 value 래퍼를
-        사용한다. 2026-11 실측 기준 현재 발급 키로는 거부 응답만 관측되어
-        성공 응답 필드는 미확인 상태다.
+        사용한다. 2026-11-08 실측으로 전체 응답 형식을 확인했다.
       security:
         - McpApiKeyAuth: []
       parameters:
+        - $ref: "#/components/parameters/McpToolName"
         - name: searchKeyword
           in: query
           schema: { type: string }
@@ -207,6 +207,7 @@ paths:
       security:
         - McpApiKeyAuth: []
       parameters:
+        - $ref: "#/components/parameters/McpToolName"
         - name: searchKeyword
           in: query
           schema: { type: string }
@@ -245,6 +246,7 @@ paths:
       security:
         - McpApiKeyAuth: []
       parameters:
+        - $ref: "#/components/parameters/McpToolName"
         - name: dataSetSn
           in: query
           required: true
@@ -266,6 +268,7 @@ paths:
       security:
         - McpApiKeyAuth: []
       parameters:
+        - $ref: "#/components/parameters/McpToolName"
         - name: srchGuideFileSe
           in: query
           schema: { type: string, enum: [ANY, FILESE001, FILESE002] }
@@ -296,6 +299,14 @@ components:
       name: X-API-KEY
       description: AI Hub MCP 메타데이터 API 인증용 API 키 헤더.
   parameters:
+    McpToolName:
+      name: X-MCP-Tool
+      in: header
+      required: true
+      schema:
+        type: string
+        enum: [searchDataSets, countDataSets, getDataSet, getDataSetsWithGuide]
+      description: 공식 MCP 서버가 도구 호출마다 전송하는 헤더. 화이트리스트에 없는 값은 거부된다(2026-11-08 실측).
     DatasetKey:
       name: datasetKey
       in: path

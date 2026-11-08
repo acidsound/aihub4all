@@ -41,7 +41,7 @@ AI Hub 데이터는 이용 목적을 적은 별도 신청이 필요할 수 있�
 aihubshell 다운로드 API와 별도로 데이터셋 메타데이터를 JSON으로 조회하는 MCP용 API. 공식 MCP 서버 구현(github.com/aihub-git/AIHub-MCP)에서 확인.
 
 - 기본 주소: `https://aihub.or.kr/mcp/`
-- 인증: 모든 요청에 `X-API-KEY` 헤더로 AI Hub API key 전달
+- 인증: `X-API-KEY` 헤더 + `X-MCP-Tool` 헤더(공식 도구명: searchDataSets, countDataSets, getDataSet, getDataSetsWithGuide 중 하나). X-MCP-Tool이 없거나 화이트리스트 외 값이면 "잘못된 접근입니다" 거부(라이브 실측 2026-11-08)
 - envelope: `{"result":"SUCCESS","data":{...},"totalCount":{"총 개수":N}}`
 - 데이터 필드는 `{value,label,description}` 래퍼로 오며 도구는 value만 풀어준다
 - 상세 섹션은 한국어 키 사용(`주요 정보`, `데이터 개요` 등)
@@ -67,7 +67,7 @@ python skills/aihub-access/scripts/aihub.py --json guides --type manual --limit 
 
 실패 응답: `{"result":"FAIL","message":"..."}`(일부는 guideUrl 포함). 실패 코드 `mcp_request_failed`.
 
-실측 한계(2026-11): 우리 key로는 "잘못된 접근입니다" 실패만 관측됨. 경로·파라미터·envelope 구조는 공식 MCP 서버 소스에서 확인했으나, 성공 응답 사례는 미확인.
+라이브 실측(2026-11-08): search/count/detail/describe/guides 전부 정상 응답 확인. 같은 key로 `/down` 다운로드도 정상.
 
 ## 확인된 서버 동작
 

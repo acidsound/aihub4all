@@ -25,6 +25,15 @@ from typing import Any, Iterable, TextIO
 API_BASE = "https://api.aihub.or.kr"
 MCP_BASE = "https://aihub.or.kr/mcp/"
 MCP_KEY_HEADER = "X-API-KEY"
+# The backend rejects requests that do not carry one of the official MCP
+# tool names in X-MCP-Tool ("잘못된 접근입니다", live-tested 2026-11-08).
+MCP_TOOL_HEADER = "X-MCP-Tool"
+MCP_TOOL_NAMES = {
+    "list": "searchDataSets",
+    "count": "countDataSets",
+    "detail": "getDataSet",
+    "guides": "getDataSetsWithGuide",
+}
 DOWNLOAD_VERSION = "0.6"
 USER_AGENT = "AIHub4All/0.1.0 (+https://github.com/acidsound/aihub4all)"
 PART_RE = re.compile(r"^(?P<base>.+)\.part(?P<offset>[0-9]+)$")
@@ -139,8 +148,12 @@ def request_metadata(path: str) -> Any:
         return body
 
 
-def request_mcp(path: str, params: dict[str, Any]) -> dict[str, Any]:
-    """Call an AI Hub MCP metadata endpoint and return the raw envelope."""
+def request_mcp(path: str, params: dict[str, Any], mcp_tool: str) -> dict[str, Any]:
+    """Call an AI Hub MCP metadata endpoint and return the raw envelope.
+
+    mcp_tool must be one of the official tool names; the backend rejects
+    requests whose X-MCP-Tool value it does not recognize.
+    """
     api_key = _api_key()
     url = MCP_BASE + path
     if params:
@@ -150,6 +163,7 @@ def request_mcp(path: str, params: dict[str, Any]) -> dict[str, Any]:
         headers={
             "Accept": "application/json",
             MCP_KEY_HEADER: api_key,
+            MCP_TOOL_HEADER: mcp_tool,
             "User-Agent": USER_AGENT,
         },
     )
@@ -632,7 +646,7 @@ def mcp_search(
         params["recordCountPerPage"] = str(limit)
     if offset is not None:
         params["firstIndex"] = str(offset)
-    envelope = request_mcp("dataSetList.do", params)
+    envelope = request_mcp("dataSetList.do", params, MCP_TOOL_NAMES["list"])
     data = envelope.get("data")
     rows = data.get("list") if isinstance(data, dict) else None
     items = rows.get("value") if isinstance(rows, dict) else None
@@ -643,14 +657,14 @@ def mcp_search(
 
 
 def mcp_count(filters: dict[str, Any]) -> dict[str, Any]:
-    envelope = request_mcp("dataSetCnt.do", _search_params(filters))
+    envelope = request_mcp("dataSetCnt.do", _search_params(filters), MCP_TOOL_NAMES["count"])
     return {"total_count": _mcp_total_count(envelope)}
 
 
 def mcp_detail(data_set_sn: str) -> dict[str, Any]:
     if not data_set_sn.isdigit():
         raise AIHubError("dataSetSn must contain digits only.", code="invalid_identifier")
-    envelope = request_mcp("dataSetDetail.do", {"dataSetSn": data_set_sn})
+    envelope = request_mcp("dataSetDetail.do", {"dataSetSn": data_set_sn}, MCP_TOOL_NAMES["detail"])
     return unwrap_field(envelope.get("data") or {})
 
 
@@ -723,7 +737,7 @@ def mcp_guides(guide_type: str = "any", limit: int = 10) -> dict[str, Any]:
         "firstIndex": "0",
         "recordCountPerPage": str(max(1, min(limit, 200))),
     }
-    envelope = request_mcp("getDataSetsWithGuide.do", params)
+    envelope = request_mcp("getDataSetsWithGuide.do", params, MCP_TOOL_NAMES["guides"])
     raw_data = envelope.get("data")
     data: dict[str, Any] = raw_data if isinstance(raw_data, dict) else {}
     counts: dict[str, Any] = {}
